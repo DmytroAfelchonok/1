@@ -1,37 +1,44 @@
 <?php
-// TODO 1: PREPARING ENVIRONMENT: 1) session 2) functions
 session_start();
 
-define('GUESTBOOK_FILE', 'guestbook.csv');
+require_once 'config.php';
+
 $errors = [];
 
-/**
- * Функция для рендеринга комментариев из guestbook.csv
- */
-function renderGuestbookComments($page = 1, $perPage = 5)
+$db = mysqli_connect(
+    $config['host'],
+    $config['user'],
+    $config['pass'],
+    $config['name']
+);
+
+if (!$db) {
+    die("Помилка підключення до бази даних: " . mysqli_connect_error());
+}
+
+function renderGuestbookComments($db, $page = 1, $perPage = 5)
 {
-    if (!file_exists(GUESTBOOK_FILE)) {
+    $offset = ($page - 1) * $perPage;
+    $query = "SELECT * FROM comments ORDER BY id DESC LIMIT $offset, $perPage";
+    $result = mysqli_query($db, $query);
+
+    if (!$result || mysqli_num_rows($result) === 0) {
         echo "<p>Коментарів поки немає.</p>";
         return;
     }
 
-    $comments = array_reverse(array_map('str_getcsv', file(GUESTBOOK_FILE)));
-
-    // Пагинация
-    $totalComments = count($comments);
-    $totalPages = ceil($totalComments / $perPage);
-    $offset = ($page - 1) * $perPage;
-    $commentsToShow = array_slice($comments, $offset, $perPage);
-
-    foreach ($commentsToShow as $comment) {
-        list($email, $name, $text, $date) = $comment;
+    while ($comment = mysqli_fetch_assoc($result)) {
         echo "<div class='border p-2 my-2'>
-                <strong>$name ($email)</strong> <em>$date</em><br>
-                <p>$text</p>
+                <strong>{$comment['name']} ({$comment['email']})</strong> <em>{$comment['date']}</em><br>
+                <p>{$comment['text']}</p>
               </div>";
     }
 
-    // Навигация по страницам
+    $countQuery = "SELECT COUNT(*) as total FROM comments";
+    $countResult = mysqli_query($db, $countQuery);
+    $countRow = mysqli_fetch_assoc($countResult);
+    $totalPages = ceil($countRow['total'] / $perPage);
+
     echo "<div class='pagination'>";
     for ($i = 1; $i <= $totalPages; $i++) {
         echo "<a href='?page=$i' class='btn btn-sm btn-secondary mx-1'>$i</a>";
@@ -39,39 +46,35 @@ function renderGuestbookComments($page = 1, $perPage = 5)
     echo "</div>";
 }
 
-// TODO 3: CODE by REQUEST METHODS (ACTIONS) GET, POST, etc.
 if ($_SERVER["REQUEST_METHOD"] === "POST") {
     $email = trim($_POST['email'] ?? '');
     $name = trim($_POST['name'] ?? '');
     $text = trim($_POST['text'] ?? '');
     $date = date('Y-m-d H:i:s');
 
-    // Валидация
     if (empty($email) || !filter_var($email, FILTER_VALIDATE_EMAIL)) {
         $errors[] = "Некорректный email";
     }
     if (empty($name)) {
-        $errors[] = "Им'я не може бути порожнім";
+        $errors[] = "Ім'я не може бути порожнім";
     }
     if (empty($text)) {
         $errors[] = "Текст коментаря не може бути порожнім";
     }
 
-    // Если нет ошибок, записываем в файл
     if (!$errors) {
-        $file = fopen(GUESTBOOK_FILE, "a");
-        fputcsv($file, [$email, $name, $text, $date]);
-        fclose($file);
+        $query = "INSERT INTO comments (email, name, text, date) VALUES (?, ?, ?, ?)";
+        $stmt = mysqli_prepare($db, $query);
+        mysqli_stmt_bind_param($stmt, 'ssss', $email, $name, $text, $date);
+        mysqli_stmt_execute($stmt);
+        mysqli_stmt_close($stmt);
 
-        // Перезагрузка страницы после отправки
         header("Location: " . $_SERVER['PHP_SELF']);
         exit();
     }
 }
 
-// Определяем текущую страницу пагинации
 $page = isset($_GET['page']) ? (int)$_GET['page'] : 1;
-
 ?>
 
 <!DOCTYPE html>
@@ -84,12 +87,9 @@ $page = isset($_GET['page']) ? (int)$_GET['page'] : 1;
 </head>
 <body>
 <div class="container">
-    <!-- navbar menu -->
     <?php require_once 'sectionNavbar.php'; ?>
-
     <br>
 
-    <!-- guestbook section -->
     <div class="card card-primary">
         <div class="card-header bg-primary text-light">
             GuestBook form
@@ -97,7 +97,6 @@ $page = isset($_GET['page']) ? (int)$_GET['page'] : 1;
         <div class="card-body">
             <div class="row">
                 <div class="col-sm-6">
-                    <!-- TODO: create guestBook html form -->
                     <form method="post">
                         <div class="mb-3">
                             <label for="email" class="form-label">Email:</label>
@@ -114,7 +113,6 @@ $page = isset($_GET['page']) ? (int)$_GET['page'] : 1;
                         <button type="submit" class="btn btn-primary">Відправити</button>
                     </form>
 
-                    <!-- Вывод ошибок валидации -->
                     <?php if ($errors): ?>
                         <div class="alert alert-danger mt-3">
                             <ul>
@@ -138,8 +136,7 @@ $page = isset($_GET['page']) ? (int)$_GET['page'] : 1;
         <div class="card-body">
             <div class="row">
                 <div class="col-sm-6">
-                    <!-- TODO: render guestBook comments -->
-                    <?php renderGuestbookComments($page); ?>
+                    <?php renderGuestbookComments($db, $page); ?>
                 </div>
             </div>
         </div>

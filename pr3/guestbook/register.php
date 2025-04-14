@@ -1,59 +1,55 @@
 <?php
-// TODO 1: PREPARING ENVIRONMENT: 1) session 2) functions
 session_start();
 
-// TODO 2: ROUTING
+require_once 'config.php';
+
+$db = mysqli_connect(
+    $config['host'],
+    $config['user'],
+    $config['pass'],
+    $config['name']
+);
+
+if (!$db) {
+    die("Помилка підключення до бази даних: " . mysqli_connect_error());
+}
+
 if (!empty($_SESSION['auth'])) {
     header('Location: /admin.php');
     die;
 }
 
-// TODO 3: CODE by REQUEST METHODS (ACTIONS) GET, POST, etc. (handle data from request): 1) validate 2) working with data source 3) transforming data
-
-// 1. Create empty $infoMessage
 $infoMessage = '';
 
-// 2. handle form data
 if (!empty($_POST['email']) && !empty($_POST['password'])) {
 
-    // 3. Check that user has already existed
-    $isAlreadyRegistered = false;
-    $fileUsers = 'users.csv';
+    $email = trim($_POST['email']);
+    $password = trim($_POST['password']);
 
-    if (file_exists($fileUsers)) {
-        $sUsers = file_get_contents($fileUsers);
-        $aJsonsUsers = explode("\n", $sUsers);
+    // Проверка, существует ли пользователь с таким email
+    $stmt = mysqli_prepare($db, "SELECT id FROM users WHERE email = ?");
+    mysqli_stmt_bind_param($stmt, 's', $email);
+    mysqli_stmt_execute($stmt);
+    $result = mysqli_stmt_get_result($stmt);
+    $user = mysqli_fetch_assoc($result);
+    mysqli_stmt_close($stmt);
 
-        foreach ($aJsonsUsers as $jsonUser) {
-            $aUser = json_decode($jsonUser, true);
-            if (!$aUser) break;
-
-            foreach ($aUser as $email => $password) {
-                if (($email == $_POST['email']) && ($password == $_POST['password'])) {
-                    $isAlreadyRegistered = true;
-
-                    $infoMessage = "Такой пользователь уже существует! Перейдите на страницу входа. ";
-                    $infoMessage .= "<a href='/login.php'>Страница входа</a>";
-                }
-            }
-        }
-    }
-
-    if (!$isAlreadyRegistered) {
-        // 4. Create new user
-        $aNewUser = [$_POST['email'] => $_POST['password']];
-        file_put_contents("users.csv", json_encode($aNewUser) . "\n", FILE_APPEND);
+    if ($user) {
+        $infoMessage = "Такий користувач вже існує! Перейдіть на <a href='login.php'>сторінку входу</a>.";
+    } else {
+        // Вставка нового пользователя
+        $stmt = mysqli_prepare($db, "INSERT INTO users (email, password) VALUES (?, ?)");
+        mysqli_stmt_bind_param($stmt, 'ss', $email, $password);
+        mysqli_stmt_execute($stmt);
+        mysqli_stmt_close($stmt);
 
         header('Location: /login.php');
-        die;
+        exit;
     }
 
 } elseif (!empty($_POST)) {
-    $infoMessage = 'Заполните форму регистрации!';
+    $infoMessage = 'Заповніть форму реєстрації!';
 }
-
-// TODO 4: RENDER: 1) view (html) 2) data (from php)
-
 ?>
 
 

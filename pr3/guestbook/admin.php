@@ -2,6 +2,8 @@
 // TODO 1: PREPARING ENVIRONMENT: 1) session 2) functions
 session_start();
 
+require_once 'config.php';
+
 // TODO 2: ROUTING
 if (empty($_SESSION['auth'])) {
     header('Location: /index.php');

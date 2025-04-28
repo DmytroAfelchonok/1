@@ -1,0 +1,17 @@
+{
+    "name": "shadow/guestbook-oop-mvc-base",
+    "autoload": {
+        "psr-4": {
+            "Shadow\\GuestbookOopMvcBase\\": "src/"
+        }
+    },
+    "authors": [
+        {
+            "name": "Dmytro",
+            "email": "d.y.afelchonok@student.khai.edu"
+        }
+    ],
+    "require": {
+        "symfony/var-dumper": "^7.2"
+    }
+}
